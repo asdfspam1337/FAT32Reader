@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+
+"""
+Contains all tests for the Master Boot Record module.
+"""
+
+import pytest
+from mbr import *
+
+
+@pytest.fixture
+def sample_mbr():
+    """An example Master Boot Record (LBA=0).
+
+    Source: https://thestarman.pcministry.com/asm/mbr/STDMBR.htm (2 Jan 2024)"""
+    return bytes.fromhex(
+        "FA33C08ED0BC007C8BF45007501FFBFCBF0006B90001F2A5EA1D060000BEBE07B304803C80740E803C00751C83C610FECB75EFCD188B148B4C028BEE83C610FECB741A803C0074F4BE8B06AC3C00740B56BB0700B40ECD105EEBF0EBFEBF0500BB007CB8010257CD135F730C33C0CD134F75EDBEA306EBD3BEC206BFFE7D813D55AA75C78BF5EA007C0000496E76616C696420706172746974696F6E207461626C65004572726F72206C6F6164696E67206F7065726174696E672073797374656D004D697373696E67206F7065726174696E672073797374656D000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000800101000B7FBFFD3F000000C1405E0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000055AA"
+    )
+
+
+def test_parse_partiton_entry():
+    partition_entry_bytes = bytes.fromhex("0102030405060708030000000d0e0f10")
+    partition_entry: PartitionEntry = parse_partition_entry(partition_entry_bytes)
+    assert partition_entry.type_code == 0x05
+    assert partition_entry.lba_begin == 3
+
+
+def test_create_mbr(sample_mbr):
+    """Create a MBR record and validate some attributes."""
+    mbr: MasterBootRecord = create_mbr(sample_mbr)
+    assert mbr.boot_code[0x47 : 0x47 + 4] == bytes.fromhex("F4 BE 8B 06")
+    assert mbr.partitions[0].type_code == 0x0B
+
+
+def test_faulty_mbr():
+    """Ensures that all MBRs have the last bytes set as 0x55AA (big endian)."""
+    faulty_mbr = b"\x69" * 510 + b"\x13\x37"
+    with pytest.raises(FaultyMBRError):
+        create_mbr(faulty_mbr)
+
+
+def test_wrong_size():
+    """Ensures the MBR is always 512 bytes."""
+    with pytest.raises(InvalidMBRSizeError):
+        create_mbr(b"\xdd" * 1000)
